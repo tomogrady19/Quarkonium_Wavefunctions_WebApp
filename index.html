@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Meson Radial Wavefunctions</title>
+    <title>Quarkonium Radial Wavefunctions</title>
 
-    <!-- PyScript -->
-    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
-    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <!-- Use stable PyScript version -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2023.12.1/pyscript.css" />
+    <script defer src="https://pyscript.net/releases/2023.12.1/pyscript.js"></script>
 
     <style>
         body {
@@ -15,17 +15,14 @@
             margin: 0 auto;
             padding: 1.5rem;
         }
-        button {
-            padding: 0.5rem 1rem;
-            margin: 0.25rem;
-            font-size: 1rem;
-            cursor: pointer;
+        h1, h2 {
+            margin-top: 1.2rem;
         }
-        #plot {
+        #plots > div {
             border: 1px solid #ddd;
             padding: 1rem;
-            margin-top: 1rem;
-            min-height: 350px;
+            margin-top: 1.2rem;
+            min-height: 320px;
         }
     </style>
 
@@ -35,32 +32,30 @@
     }
     </py-config>
 </head>
+
 <body>
 
-<h1>Meson Radial Wavefunctions</h1>
+<h1>Quarkonium Radial Wavefunctions</h1>
 <p>
-    Click a button to generate the corresponding radial wavefunction plot.
+    These static plots show radial wavefunctions for three heavy-quark systems
+    (charmonium, bottomonium, and the B<sub>c</sub> meson), computed by solving a
+    non-relativistic Schrödinger equation with a phenomenological potential.
 </p>
 
-<button py-click="plot_charmonium()">Plot Charmonium</button>
-<button py-click="plot_bottomonium()">Plot Bottomonium</button>
-<button py-click="plot_bc()">Plot B<sub>c</sub> Meson</button>
+<div id="plots">
+    <div id="charmonium"></div>
+    <div id="bottomonium"></div>
+    <div id="bc"></div>
+</div>
 
-<div id="plot"></div>
-
-<!-- PYTHON CODE -->
 <py-script>
 import numpy as np
 import matplotlib.pyplot as plt
 from pyscript import display
 
-##############################################################
-#  INSERT YOUR SCI-PY-FREE MESON + RK4 CODE BELOW THIS LINE  #
-##############################################################
-
-# ==== BEGIN YOUR CODE =======================================
-# (Use your rewritten Meson class with RK4 and trapz normalisation)
-
+# ------------------------------------------------------------
+# RK4 NUMERICAL SOLVER
+# ------------------------------------------------------------
 def rk4(deriv, y0, x):
     y = np.zeros((len(x), len(y0)))
     y[0] = y0
@@ -72,149 +67,4 @@ def rk4(deriv, y0, x):
         k2 = deriv(yi + 0.5*h*k1, xi + 0.5*h)
         k3 = deriv(yi + 0.5*h*k2, xi + 0.5*h)
         k4 = deriv(yi + h*k3,   xi + h)
-        y[i] = yi + (h/6)*(k1 + 2*k2 + 2*k3 + k4)
-    return y
-
-def turns(X):
-    N = 0
-    for i in range(1, len(X)-1):
-        if ((X[i-1] < X[i] and X[i+1] < X[i]) or
-            (X[i-1] > X[i] and X[i+1] > X[i])):
-            N += 1
-    return N
-
-def nodes(X):
-    return np.sum(X[:-1] * X[1:] <= 0)
-
-class Meson:
-    mass_dict = {'charm': 1.34, 'bottom': 4.7}
-    u0 = np.array([0.0, 1.0])
-    ac = 0.0
-
-    def __init__(self, q1='charm', q2='charm'):
-        if q1 == q2 == 'charm':
-            state_mass = 3.068
-            self.a = 0.4
-            self.rs = np.arange(0.0001, 15, 0.01)
-        elif q1 == q2 == 'bottom':
-            state_mass = 9.3987
-            self.a = 0.28
-            self.rs = np.arange(0.0001, 9, 0.01)
-        else:
-            state_mass = 6.276
-            self.a = 0.34
-            self.rs = np.arange(0.0001, 15, 0.01)
-
-        self.m1 = self.mass_dict[q1]
-        self.m2 = self.mass_dict[q2]
-        self.mu = 1/(1/self.m1 + 1/self.m2)
-        self.E = state_mass - self.m1 - self.m2
-        self.n = 1
-        self.l = 0
-        self.b = 0.2
-
-    def radial_equation(self, uvec, r):
-        u, dudr = uvec
-        if r > 0:
-            d2 = (self.l*(self.l+1)/r**2 - 2*self.mu*(self.E - self.b*r + 4*self.a/(3*r))) * u
-        else:
-            d2 = 0.0
-        return np.array([dudr, d2])
-
-    def wf_E(self, E):
-        self.E = E
-        sol = rk4(self.radial_equation, self.u0, self.rs)
-        return sol[:,0]
-
-    def TN_E(self, E):
-        x = self.wf_E(E)
-        return [turns(x), nodes(x)]
-
-    def solve_energy(self, A, C):
-        B = 0.5*(A+C)
-        A_tn = self.TN_E(A)
-        B_tn = self.TN_E(B)
-        C_tn = self.TN_E(C)
-        while A_tn != B_tn or B_tn != C_tn:
-            if abs(B-A)<=self.ac or abs(C-B)<=self.ac:
-                break
-            if A_tn != B_tn:
-                C = B
-                C_tn = B_tn
-            else:
-                A = B
-                A_tn = B_tn
-            B = 0.5*(A+C)
-            B_tn = self.TN_E(B)
-        return B
-
-    def solve(self, E_range, n, l):
-        self.n = n
-        self.l = l
-        E = self.solve_energy(*E_range)
-        ys = self.wf_E(E)
-        prob = ys**2
-        norm = np.sqrt(np.trapz(prob, self.rs))
-        if norm > 0:
-            ys /= norm
-        return ys, E
-
-# ==== END YOUR CODE =========================================
-
-
-##############################################################
-#  PLOT FUNCTIONS TRIGGERED BY BUTTON CLICKS                  #
-##############################################################
-
-def plot_charmonium(event=None):
-    meson = Meson("charm", "charm")
-    ranges = [[0.3,0.4], [0.8,0.9], [1.0,1.1], [1.5,1.6]]
-    nl = [(1,0), (1,1), (2,0), (3,0)]
-    fig, ax = plt.subplots()
-    for (n,l), E_range in zip(nl, ranges):
-        ys, E = meson.solve(E_range, n, l)
-        ax.plot(meson.rs, ys, label=f"n={n}, l={l}")
-    ax.set_title("Charmonium Radial Wavefunctions")
-    ax.set_xlabel("r (GeV⁻¹)")
-    ax.set_ylabel("uₙₗ(r)")
-    ax.grid()
-    ax.legend()
-    display(fig, target="plot", append=False)
-    plt.close(fig)
-
-def plot_bottomonium(event=None):
-    meson = Meson("bottom", "bottom")
-    ranges = [[0.12,0.13], [0.5,0.6], [0.6,0.7], [1.0,1.1]]
-    nl = [(1,0), (1,1), (2,0), (3,0)]
-    fig, ax = plt.subplots()
-    for (n,l), E_range in zip(nl, ranges):
-        ys, E = meson.solve(E_range, n, l)
-        ax.plot(meson.rs, ys, label=f"n={n}, l={l}")
-    ax.set_title("Bottomonium Radial Wavefunctions")
-    ax.set_xlabel("r (GeV⁻¹)")
-    ax.set_ylabel("uₙₗ(r)")
-    ax.grid()
-    ax.legend()
-    display(fig, target="plot", append=False)
-    plt.close(fig)
-
-def plot_bc(event=None):
-    meson = Meson("bottom", "charm")
-    ranges = [[0.2,0.3], [0.6,0.7], [1.1,1.2]]
-    nl = [(1,0), (1,1), (2,0)]
-    fig, ax = plt.subplots()
-    for (n,l), E_range in zip(nl, ranges):
-        ys, E = meson.solve(E_range, n, l)
-        ax.plot(meson.rs, ys, label=f"n={n}, l={l}")
-    ax.set_title("B₍c₎ Radial Wavefunctions")
-    ax.set_xlabel("r (GeV⁻¹)")
-    ax.set_ylabel("uₙₗ(r)")
-    ax.grid()
-    ax.legend()
-    display(fig, target="plot", append=False)
-    plt.close(fig)
-
-</py-script>
-
-</body>
-</html>
+        y[i] = yi + (h/6)*(k1 + 2*k2 + 2*k3 + k*
